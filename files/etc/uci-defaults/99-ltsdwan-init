@@ -2,40 +2,35 @@
 
 echo "[LTSDWAN] Initial network & system setup..."
 
+# ---------- Detect WAN ----------
+WAN_IF=$(ip route | awk '/default/ {print $5; exit}')
+[ -z "$WAN_IF" ] && WAN_IF="eth0"
+
+# ---------- Network ----------
 uci -q delete network.lan
 uci -q delete network.wan
 
-# WAN eth0
 uci set network.wan=interface
-uci set network.wan.device='eth0'
+uci set network.wan.device="$WAN_IF"
 uci set network.wan.proto='dhcp'
 
-# LAN eth1-eth4 (172 段)
-uci set network.lan1=interface
-uci set network.lan1.device='eth1'
-uci set network.lan1.proto='static'
+# LAN ports
+for i in 1 2 3 4; do
+  uci set network.lan$i=interface
+  uci set network.lan$i.device="eth$i"
+  uci set network.lan$i.proto='static'
+done
+
 uci set network.lan1.ipaddr='172.16.10.1'
-uci set network.lan1.netmask='255.255.255.0'
-
-uci set network.lan2=interface
-uci set network.lan2.device='eth2'
-uci set network.lan2.proto='static'
 uci set network.lan2.ipaddr='172.16.20.1'
-uci set network.lan2.netmask='255.255.255.0'
-
-uci set network.lan3=interface
-uci set network.lan3.device='eth3'
-uci set network.lan3.proto='static'
 uci set network.lan3.ipaddr='172.16.30.1'
-uci set network.lan3.netmask='255.255.255.0'
-
-uci set network.lan4=interface
-uci set network.lan4.device='eth4'
-uci set network.lan4.proto='static'
 uci set network.lan4.ipaddr='172.16.40.1'
+uci set network.lan1.netmask='255.255.255.0'
+uci set network.lan2.netmask='255.255.255.0'
+uci set network.lan3.netmask='255.255.255.0'
 uci set network.lan4.netmask='255.255.255.0'
 
-# 管理口 eth5
+# Management port
 uci set network.mgmt=interface
 uci set network.mgmt.device='eth5'
 uci set network.mgmt.proto='static'
@@ -44,28 +39,28 @@ uci set network.mgmt.netmask='255.255.255.0'
 
 uci commit network
 
-# 防火墙
-uci -q delete firewall.@zone[0]
-uci -q delete firewall.@zone[1]
+# ---------- Firewall ----------
+uci -q delete firewall.lan
+uci -q delete firewall.wan
 
-uci add firewall zone
-uci set firewall.@zone[-1].name='lan'
-uci set firewall.@zone[-1].input='ACCEPT'
-uci set firewall.@zone[-1].output='ACCEPT'
-uci set firewall.@zone[-1].forward='ACCEPT'
-uci add_list firewall.@zone[-1].network='lan1'
-uci add_list firewall.@zone[-1].network='lan2'
-uci add_list firewall.@zone[-1].network='lan3'
-uci add_list firewall.@zone[-1].network='lan4'
-uci add_list firewall.@zone[-1].network='mgmt'
+uci set firewall.lan=zone
+uci set firewall.lan.name='lan'
+uci set firewall.lan.input='ACCEPT'
+uci set firewall.lan.output='ACCEPT'
+uci set firewall.lan.forward='REJECT'
+uci add_list firewall.lan.network='lan1'
+uci add_list firewall.lan.network='lan2'
+uci add_list firewall.lan.network='lan3'
+uci add_list firewall.lan.network='lan4'
+uci add_list firewall.lan.network='mgmt'
 
-uci add firewall zone
-uci set firewall.@zone[-1].name='wan'
-uci set firewall.@zone[-1].input='REJECT'
-uci set firewall.@zone[-1].output='ACCEPT'
-uci set firewall.@zone[-1].forward='REJECT'
-uci set firewall.@zone[-1].masq='1'
-uci add_list firewall.@zone[-1].network='wan'
+uci set firewall.wan=zone
+uci set firewall.wan.name='wan'
+uci set firewall.wan.input='REJECT'
+uci set firewall.wan.output='ACCEPT'
+uci set firewall.wan.forward='REJECT'
+uci set firewall.wan.masq='1'
+uci add_list firewall.wan.network='wan'
 
 uci add firewall forwarding
 uci set firewall.@forwarding[-1].src='lan'
@@ -73,17 +68,21 @@ uci set firewall.@forwarding[-1].dest='wan'
 
 uci commit firewall
 
-# Web 端口
-uci delete uhttpd.main.listen_http
+# ---------- Web ----------
+uci -q delete uhttpd.main.listen_http
+uci -q delete uhttpd.main.listen_https
 uci add_list uhttpd.main.listen_http='0.0.0.0:10834'
 uci set uhttpd.main.redirect_https='0'
 uci commit uhttpd
 
-# root 密码
+# ---------- Password ----------
 echo "root:@Feng%Zi!&" | chpasswd
 
+# ---------- Restart ----------
 /etc/init.d/network restart
 /etc/init.d/firewall restart
 /etc/init.d/uhttpd restart
 
+# ---------- One-shot ----------
+rm -f /etc/uci-defaults/99-ltsdwan-init
 exit 0
