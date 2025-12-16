@@ -1,3 +1,6 @@
+- name: Fix permissions
+  run: chmod +x files/etc/uci-defaults/99-ltsdwan-init
+
 - name: Load custom config
   run: |
     make defconfig
